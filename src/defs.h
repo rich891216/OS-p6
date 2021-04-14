@@ -9,6 +9,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct pt_entry;
 
 // bio.c
 void            binit(void);
@@ -120,6 +121,9 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+int             mencrypt(char*, int);
+int             getpgtable(struct pt_entry*, int);
+int             dump_rawphymem(uint, char*);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
@@ -185,6 +189,9 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
+pde_t*			outside_walkpgdir(pde_t*, const void *, int);
+int 			mencrypt(char*, int);
+int             decrypt(char*);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

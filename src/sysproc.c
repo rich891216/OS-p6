@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
+#include "ptentry.h"
 
 int
 sys_fork(void)
@@ -88,4 +89,50 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+// encrypt memory
+int
+sys_mencrypt(void)
+{
+  char *virtual_addr;
+  int len;
+
+  if (argint(1, &len) < 0 || argptr(0, &virtual_addr, sizeof(virtual_addr)) < 0) {
+	if (len == 0) {
+		return 0;
+	}
+	return -1;
+  }
+  return mencrypt(virtual_addr, len);
+}
+
+// get statistics of memory
+int
+sys_getpgtable(void)
+{
+  // implement
+  int num;
+  struct pt_entry *entries;
+
+  if (argint(1, &num) < 0 || argptr(0, (void *)&entries, sizeof(entries)) < 0) {
+    // something is invalid
+    return -1;
+  }
+
+  return getpgtable(entries, num);
+}
+
+// allows the user to dump the raw content of one physical page where physical_addr resides
+int
+sys_dump_rawphymem(void) {
+  // TODO: implement
+  // DO NOT USE ARGPTR HERE
+  int physical_addr;
+  char *buffer;
+  
+  if (argint(0, &physical_addr) < 0 || argptr(1, &buffer, PGSIZE) < 0) {
+    return -1;
+  }
+  return dump_rawphymem((uint)physical_addr, buffer);
 }
