@@ -92,6 +92,7 @@ exec(char *path, char **argv)
     if(*s == '/')
       last = s+1;
   safestrcpy(curproc->name, last, sizeof(curproc->name));
+  mencrypt();
 
   // Commit to the user image.
   oldpgdir = curproc->pgdir;
