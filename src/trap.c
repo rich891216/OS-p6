@@ -81,10 +81,12 @@ void trap(struct trapframe *tf)
 		// check if clock array is full
 		// if full: pick victim to encrypt,
 		// else: decrypt and add to clock
-
-		if (decrypt((char*)rcr2()) == 0) {
+		wset_toadd = (char *)rcr2();
+		if (decrypt(wset_toadd) == 0)
+		{
 			// successfully decrypted
 			// add to working set
+			wsetinsert(wset_toadd);
 			lapiceoi();
 			// return;
 			break;

@@ -192,6 +192,9 @@ void            clearpteu(pde_t *pgdir, char *uva);
 pde_t*			outside_walkpgdir(pde_t*, const void *, int);
 int 			mencrypt(char*, int);
 int             decrypt(char*);
+int				wsetinsert(char*);
+int				wsetdelete(char*);
+int wsetclear();
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

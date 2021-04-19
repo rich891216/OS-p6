@@ -556,6 +556,7 @@ int wsetinsert(char *addr)
 		if (clockqueue[i] == 0) {
 			// has empty entry
 			// add to queue here and return
+			clockqueue[i] = addr;
 			return 0;
 		}
 	}
@@ -566,7 +567,7 @@ int wsetinsert(char *addr)
 		char *tempaddr = clockqueue[i % CLOCKSIZE];
 		pte_t *pte = walkpgdir(myproc()->pgdir, tempaddr, 0);
 		if ((*pte & PTE_A)) {
-			*pte = (*pte & ~PTE_A);
+			*pte = (*pte) & (~PTE_A);
 			headindex++;
 		} else {
 			clockqueue[i % headindex] = addr;
