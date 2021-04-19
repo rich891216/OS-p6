@@ -579,6 +579,7 @@ int wsetinsert(char *addr)
 		pte_t *pte = walkpgdir(myproc()->pgdir, tempaddr, 0);
 		if ((*pte & PTE_A)) {
 			*pte = (*pte) & (~PTE_A);
+			shift();
 		} else {
 			clockqueue[0] = addr;
 			break;
