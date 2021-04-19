@@ -501,11 +501,11 @@ int mencrypt(char *virtual_addr, int len)
 }
 
 // NEED TO: change to have wSetOnly mode
-int getpgtable(struct pt_entry *entries, int num)
+int getpgtable(struct pt_entry *entries, int num int wsetOnly)
 {
 	// implementation: fill up entries as <entries> is passed in as empty array
 	// print
-
+	// if wsetonly == 1, only output contents in working set
 	struct proc *curproc = myproc();
 
 	if (entries == 0) {
@@ -546,3 +546,28 @@ int dump_rawphymem(uint physical_addr, char *buffer)
 }
 
 // implement queue here?
+int wsetinsert(char *addr)
+{
+	for (int i = 0; i < CLOCKSIZE; i++) {
+		if (clockqueue[i] == 0) {
+			// has empty entry
+			// add to queue here and return
+			return 0;
+		}
+	}
+	// clock queue is full, find victim
+	// victim should be encrypted
+	// replace victim with new encrypted page
+	return 0;
+}
+
+int wsetdelete(char *addr)
+{
+
+}
+int clearwset() {
+	for (int i = 0; i < CLOCKSIZE; i++) {
+		clockqueue[i] = 0;
+	}
+	return 0;
+}

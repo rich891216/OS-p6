@@ -84,6 +84,7 @@ void trap(struct trapframe *tf)
 
 		if (decrypt((char*)rcr2()) == 0) {
 			// successfully decrypted
+			// add to working set
 			lapiceoi();
 			// return;
 			break;
