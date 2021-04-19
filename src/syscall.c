@@ -103,7 +103,6 @@ extern int sys_unlink(void);
 extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
-extern int sys_mencrypt(void);
 extern int sys_getpgtable(void);
 extern int sys_dump_rawphymem(void);
 
@@ -129,7 +128,6 @@ static int (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
-[SYS_mencrypt]  sys_mencrypt,
 [SYS_getpgtable]  sys_getpgtable,
 [SYS_dump_rawphymem] sys_dump_rawphymem,
 };

@@ -12,63 +12,6 @@ struct {
   struct proc proc[NPROC];
 } ptable;
 
-struct proc *head = 0;
-struct proc *tail = 0;
-
-void insert_proc (struct proc *p) {
-	if (p == 0) {
-		return;
-	}
-
-	if (head == 0) {
-		head = p;
-		tail = p;
-		head->next = 0;
-		tail->next = 0;
-	} else {
-		tail->next = p;
-		tail = p;
-		tail->next = 0;
-	}
-}
-
-void delete_proc (struct proc *p) {
-	if (head == 0) {
-		cprintf("delete_proc: list is empty.\n");
-		return;
-	}
-
-	if (p == 0) {
-		return;
-	}
-
-	struct proc *cur = head;
-	struct proc *prev = head;
-
-	if (cur != 0 && cur->pid == p->pid) {
-		head = cur->next;
-		if (prev->pid == tail->pid) {
-			tail = head;
-		}
-		cur = 0;
-		prev = 0;
-		return;
-	}
-
-	while (cur != 0 && cur->pid != p->pid) {
-		if (cur->pid == p->pid) {
-			if (cur->tail) {
-				tail = prev;
-			}
-			prev->next = cur->next;
-			cur = 0;
-		}
-
-		prev = cur;
-		cur = cur->next
-	}
-}
-
 static struct proc *initproc;
 
 int nextpid = 1;
@@ -222,12 +165,15 @@ growproc(int n)
   if(n > 0){
     if((sz = allocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
+
+	// NEED TO: encrypt from sz to sz + n
   } else if(n < 0){
     if((sz = deallocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
+
+	// NEED TO: remove deallocated pages from queue, wrapper to queue_remove to remove all
   }
   curproc->sz = sz;
-  mencrypt();
   switchuvm(curproc);
   return 0;
 }
@@ -246,6 +192,8 @@ fork(void)
   if((np = allocproc()) == 0){
     return -1;
   }
+
+  // NEED TO: clear queue of new process
 
   // Copy process state from proc.
   if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){

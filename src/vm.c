@@ -498,6 +498,7 @@ int mencrypt(char *virtual_addr, int len)
 	return 0;
 }
 
+// NEED TO: change to have wSetOnly mode
 int getpgtable(struct pt_entry *entries, int num)
 {
 	// implementation: fill up entries as <entries> is passed in as empty array
@@ -541,3 +542,5 @@ int dump_rawphymem(uint physical_addr, char *buffer)
 
 	return copyout(curproc->pgdir, (uint)buffer, kaddr, PGSIZE);
 }
+
+// implement queue here?
