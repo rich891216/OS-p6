@@ -12,7 +12,6 @@ extern char data[]; // defined by kernel.ld
 pde_t *kpgdir;		// for use in scheduler()
 
 char *clockqueue[CLOCKSIZE]; // queue of size clock size, iterate as circular array
-int headindex = 0;
 
 // Set up CPU's kernel segment descriptors.
 // Run once on entry on each CPU.
@@ -508,6 +507,7 @@ int getpgtable(struct pt_entry *entries, int num, int wsetOnly)
 	// print
 	// if wsetOnly == 1, only output contents in working set
 	if (wsetOnly) {
+		// only print working set
 		return 1;
 	}
 	struct proc *curproc = myproc();
@@ -586,6 +586,20 @@ int clearwset() {
 	for (int i = 0; i < CLOCKSIZE; i++) {
 		clockqueue[i] = 0;
 	}
-	headindex = 0;
+	return 0;
+}
+int shift() {
+	char *indexzero = clockqueue[0];
+	char *tmp1 = clockqueue[0];
+	char *tmp2 = clockqueue[0];
+	for (int i = 1; i < CLOCKSIZE; i++) {
+		if (i == CLOCKSIZE - 1) {
+			clockqueue[i] = indexzero;
+			break;
+		}
+		tmp2 = clockqueue[i];
+		clockqueue[i] = tmp1;
+		tmp2 = tmp1;
+	}
 	return 0;
 }

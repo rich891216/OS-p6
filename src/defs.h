@@ -194,7 +194,7 @@ int 			mencrypt(char*, int);
 int             decrypt(char*);
 int				wsetinsert(char*);
 int				wsetdelete(char*);
-int wsetclear();
+int             wsetclear();
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
