@@ -114,13 +114,14 @@ sys_getpgtable(void)
   // implement
   int num;
   struct pt_entry *entries;
+  int wsetOnly;
 
-  if (argint(1, &num) < 0 || argptr(0, (void *)&entries, sizeof(entries)) < 0) {
+  if (argint(1, &num) < 0 || argptr(0, (void *)&entries, sizeof(entries)) < 0 || argint(2, &wsetOnly) < 0) {
     // something is invalid
     return -1;
   }
 
-  return getpgtable(entries, num);
+  return getpgtable(entries, num, wsetOnly);
 }
 
 // allows the user to dump the raw content of one physical page where physical_addr resides

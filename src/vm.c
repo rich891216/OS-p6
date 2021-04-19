@@ -12,6 +12,7 @@ extern char data[]; // defined by kernel.ld
 pde_t *kpgdir;		// for use in scheduler()
 
 char *clockqueue[CLOCKSIZE]; // queue of size clock size, iterate as circular array
+int headindex = 0;
 
 // Set up CPU's kernel segment descriptors.
 // Run once on entry on each CPU.
@@ -501,11 +502,14 @@ int mencrypt(char *virtual_addr, int len)
 }
 
 // NEED TO: change to have wSetOnly mode
-int getpgtable(struct pt_entry *entries, int num int wsetOnly)
+int getpgtable(struct pt_entry *entries, int num, int wsetOnly)
 {
 	// implementation: fill up entries as <entries> is passed in as empty array
 	// print
-	// if wsetonly == 1, only output contents in working set
+	// if wsetOnly == 1, only output contents in working set
+	if (wsetOnly) {
+		return 1;
+	}
 	struct proc *curproc = myproc();
 
 	if (entries == 0) {
@@ -558,16 +562,29 @@ int wsetinsert(char *addr)
 	// clock queue is full, find victim
 	// victim should be encrypted
 	// replace victim with new encrypted page
+	for (int i = headindex; i < CLOCKSIZE + headindex; i++) {
+		char *tempaddr = clockqueue[i % CLOCKSIZE];
+		pte_t *pte = walkpgdir(myproc()->pgdir, tempaddr, 0);
+		if ((*pte & PTE_A)) {
+			*pte = (*pte & ~PTE_A);
+			headindex++;
+		} else {
+			clockqueue[i % headindex] = addr;
+			break;
+		}
+	}
+
 	return 0;
 }
 
 int wsetdelete(char *addr)
 {
-
+	return 0;
 }
 int clearwset() {
 	for (int i = 0; i < CLOCKSIZE; i++) {
 		clockqueue[i] = 0;
 	}
+	headindex = 0;
 	return 0;
 }

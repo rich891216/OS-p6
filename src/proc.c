@@ -171,7 +171,7 @@ growproc(int n)
     if (n % PGSIZE != 0) {
       len++;
     }
-    mencrypt(sz, len);
+    mencrypt((char*)sz, len);
   } else if(n < 0){
     if((sz = deallocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
