@@ -563,14 +563,24 @@ int wsetinsert(char *addr)
 	// clock queue is full, find victim
 	// victim should be encrypted
 	// replace victim with new encrypted page
-	for (int i = headindex; i < CLOCKSIZE + headindex; i++) {
-		char *tempaddr = clockqueue[i % CLOCKSIZE];
+	// for (int i = 0; i < CLOCKSIZE + 0; i++) {
+	// 	char *tempaddr = clockqueue[i % CLOCKSIZE];
+	// 	pte_t *pte = walkpgdir(myproc()->pgdir, tempaddr, 0);
+	// 	if ((*pte & PTE_A)) {
+	// 		*pte = (*pte) & (~PTE_A);
+	// 	} else {
+	// 		clockqueue[i] = addr;
+	// 		break;
+	// 	}
+	// }
+
+	while (1) {
+		char *tempaddr = clockqueue[0];
 		pte_t *pte = walkpgdir(myproc()->pgdir, tempaddr, 0);
 		if ((*pte & PTE_A)) {
 			*pte = (*pte) & (~PTE_A);
-			headindex++;
 		} else {
-			clockqueue[i % headindex] = addr;
+			clockqueue[0] = addr;
 			break;
 		}
 	}
