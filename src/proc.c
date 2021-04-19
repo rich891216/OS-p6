@@ -166,12 +166,17 @@ growproc(int n)
     if((sz = allocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
 
-	// NEED TO: encrypt from sz to sz + n
+	  // NEED TO: encrypt from sz to sz + n
+    int len = (n / PGSIZE);
+    if (n % PGSIZE != 0) {
+      len++;
+    }
+    mencrypt(sz, len)
   } else if(n < 0){
     if((sz = deallocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
 
-	// NEED TO: remove deallocated pages from queue, wrapper to queue_remove to remove all
+	  // NEED TO: remove deallocated pages from queue, wrapper to queue_remove to remove all
   }
   curproc->sz = sz;
   switchuvm(curproc);

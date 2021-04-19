@@ -11,6 +11,8 @@
 extern char data[]; // defined by kernel.ld
 pde_t *kpgdir;		// for use in scheduler()
 
+char *clockqueue[CLOCKSIZE]; // queue of size clock size, iterate as circular array
+
 // Set up CPU's kernel segment descriptors.
 // Run once on entry on each CPU.
 void seginit(void)

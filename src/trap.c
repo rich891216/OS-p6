@@ -78,6 +78,10 @@ void trap(struct trapframe *tf)
 		lapiceoi();
 		break;
 	case T_PGFLT:
+		// check if clock array is full
+		// if full: pick victim to encrypt,
+		// else: decrypt and add to clock
+
 		if (decrypt((char*)rcr2()) == 0) {
 			// successfully decrypted
 			lapiceoi();
