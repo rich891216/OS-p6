@@ -506,16 +506,25 @@ int getpgtable(struct pt_entry *entries, int num, int wsetOnly)
 	// implementation: fill up entries as <entries> is passed in as empty array
 	// print
 	// if wsetOnly == 1, only output contents in working set
-	if (wsetOnly) {
-		// only print working set
-		return 1;
-	}
+
 	struct proc *curproc = myproc();
 
 	if (entries == 0) {
 		return -1;
 	}
-
+	if (wsetOnly) {
+		// only print working set
+		for (int i = 0; i < CLOCKSIZE; i++) {
+			pte_t *pte = walkpgdir(curproc->pgdir, addr, 0);
+			entries[i].pdx = PDX(addr);
+			entries[i].ptx = PTX(addr);
+			entries[i].ppage = *pte >> 12;
+			entries[i].present = (*pte & PTE_P);
+			entries[i].writable = (*pte & PTE_W) >> 1;
+			entries[i].encrypted = (*pte & PTE_E) >> 9;
+		}
+		return 0;
+	}
 	char *addr = (char*)PGROUNDDOWN(curproc->sz - 1);
 
 
