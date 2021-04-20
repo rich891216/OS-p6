@@ -582,6 +582,7 @@ int wsetinsert(char *addr)
 			shift();
 		} else {
 			clockqueue[0] = addr;
+			mencrypt(tempaddr, 1);
 			break;
 		}
 	}
@@ -591,6 +592,26 @@ int wsetinsert(char *addr)
 
 int wsetdelete(char *addr)
 {
+	int index = 0;
+	int found = 0;
+	for (index = 0; index < CLOCKSIZE; index++) {
+		if (clockqueue[index] == addr) {
+			// remove and shift
+			found = 1;
+			clockqueue[index] = 0;
+		}
+	}
+	if (found) {
+		// shift and return 0
+		for (int i = index; i < CLOCKSIZE - 1; i++) {
+			clockqueue[i] = clockqueue[i+1];
+		}
+		return 0;
+	} else {
+		// not found, return -1
+		return -1;
+	}
+	
 	return 0;
 }
 int clearwset() {
@@ -600,17 +621,14 @@ int clearwset() {
 	return 0;
 }
 int shift() {
-	char *indexzero = clockqueue[0];
+	char *indexzero = clockqueue[CLOCKSIZE - 1];
 	char *tmp1 = clockqueue[0];
 	char *tmp2 = clockqueue[0];
 	for (int i = 1; i < CLOCKSIZE; i++) {
-		if (i == CLOCKSIZE - 1) {
-			clockqueue[i] = indexzero;
-			break;
-		}
 		tmp2 = clockqueue[i];
 		clockqueue[i] = tmp1;
-		tmp2 = tmp1;
+		tmp1 = tmp2;
 	}
+	clockqueue[0] = indexzero;
 	return 0;
 }
