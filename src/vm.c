@@ -462,7 +462,7 @@ int mencrypt(char *virtual_addr)
 	// encrypt the not already encrypted pages
 	// encrypt each page
 	pte_t *pte = walkpgdir(curproc->pgdir, addr, 0);
-	cprintf("encrypting 0x%x\n", *pte);
+	// cprintf("encrypting 0x%x\n", *pte);
 	if (*pte & PTE_E)
 	{
 		return 0;
@@ -470,6 +470,7 @@ int mencrypt(char *virtual_addr)
 	else
 	{
 		char *kaddr = uva2ka(curproc->pgdir, addr);
+		wsetdelete(addr);
  		for (int i = 0; i < PGSIZE; ++i) {
 			*(kaddr + i) ^= 0xFF;
 		}
@@ -499,26 +500,6 @@ int getpgtable(struct pt_entry *entries, int num, int wsetOnly)
 	if (wsetOnly != 0 && wsetOnly != 1) {
 		return -1;
 	}
-	// if (wsetOnly) {
-	// 	int count = 0;
-	// 	for (int i = 0; i < CLOCKSIZE; i++) {
-	// 		if (curproc->clockqueue[i] == 0) {
-	// 			continue;
-	// 		}
-	// 		char *addr = curproc->clockqueue[i];
-	// 		pte_t *pte = walkpgdir(curproc->pgdir, addr, 0);
-	// 		entries[count].pdx = PDX(addr);
-	// 		entries[count].ptx = PTX(addr);
-	// 		entries[count].ppage = *pte >> 12;
-	// 		entries[count].present = (*pte & PTE_P);
-	// 		entries[count].writable = (*pte & PTE_W) >> 1;
-	// 		entries[count].user = (*pte & PTE_U) >> 2;
-	// 		entries[count].encrypted = (*pte & PTE_E) >> 9;
-	// 		entries[count].ref = (*pte & PTE_A) >> 5;
-	// 		count++;
-	// 	}
-	// 	return count;
-	// }
 	char *addr = (char*)PGROUNDDOWN(curproc->sz - 1);
 
 
@@ -556,9 +537,9 @@ int getpgtable(struct pt_entry *entries, int num, int wsetOnly)
 		addr -= PGSIZE;
 	}
 
-	for (int i = 0; i < num; i++) {
-		cprintf("%d: pdx: %x ptx: %x ppage: %x present: %d writable: %d encrypted: %d\n", i, entries[i].pdx,
-				entries[i].ptx, entries[i].ppage, entries[i].present, entries[i].writable, entries[i].encrypted);
+	for (int i = 0; i < index; i++) {
+		cprintf("%d: pdx: %x ptx: %x ppage: %x present: %d writable: %d user: %d encrypted: %d ref: %d\n", i, entries[i].pdx,
+				entries[i].ptx, entries[i].ppage, entries[i].present, entries[i].writable, entries[i].user, entries[i].encrypted, entries[i].ref);
 	}
 	return index;
 }
@@ -568,7 +549,6 @@ int dump_rawphymem(uint physical_addr, char *buffer)
 	struct proc *curproc = myproc();
 
 	char *kaddr = P2V(physical_addr);
-
 	return copyout(curproc->pgdir, (uint)buffer, kaddr, PGSIZE);
 }
 
@@ -631,6 +611,7 @@ int wsetdelete(char *addr)
 		for (int i = index; i < CLOCKSIZE - 1; i++) {
 			curproc->clockqueue[i] = curproc->clockqueue[i+1];
 		}
+		curproc->clockqueue[CLOCKSIZE - 1] = 0;
 		return 0;
 	} else {
 		// not found, return -1
