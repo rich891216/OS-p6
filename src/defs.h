@@ -194,7 +194,7 @@ int 			mencrypt(char*, int);
 int             decrypt(char*);
 int				wsetinsert(char*);
 int				wsetdelete(char*);
-int             wsetclear();
+int             clearwset();
 int             shift();
 
 // number of elements in fixed-size array

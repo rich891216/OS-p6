@@ -166,8 +166,8 @@ growproc(int n)
     if((sz = allocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
 
-	  // NEED TO: encrypt from sz to sz + n
-    int len = (n / PGSIZE);
+	// NEED TO: encrypt from sz to sz + n
+	int len = (n / PGSIZE);
     if (n % PGSIZE != 0) {
       len++;
     }
@@ -176,7 +176,9 @@ growproc(int n)
     if((sz = deallocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
 
-	  // NEED TO: remove deallocated pages from queue, wrapper to queue_remove to remove all
+	for (int i = 0; i < n / PGSIZE; i++) {
+		wsetdelete((char*) sz - i);
+	}
   }
   curproc->sz = sz;
   switchuvm(curproc);
@@ -199,6 +201,7 @@ fork(void)
   }
 
   // NEED TO: clear queue of new process
+  clearwset();
 
   // Copy process state from proc.
   if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
