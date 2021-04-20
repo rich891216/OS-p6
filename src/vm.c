@@ -521,7 +521,9 @@ int getpgtable(struct pt_entry *entries, int num, int wsetOnly)
 			entries[i].ppage = *pte >> 12;
 			entries[i].present = (*pte & PTE_P);
 			entries[i].writable = (*pte & PTE_W) >> 1;
+			entries[i].user = (*pte & PTE_U) >> 2;
 			entries[i].encrypted = (*pte & PTE_E) >> 9;
+			entries[i].ref = (*pte & PTE_A) >> 5;
 		}
 		return 0;
 	}
@@ -538,7 +540,9 @@ int getpgtable(struct pt_entry *entries, int num, int wsetOnly)
 		entries[i].ppage = *pte >> 12;
 		entries[i].present = (*pte & PTE_P);
 		entries[i].writable = (*pte & PTE_W) >> 1;
+		entries[i].user = (*pte & PTE_U) >> 2;
 		entries[i].encrypted = (*pte & PTE_E) >> 9;
+		entries[i].ref = (*pte & PTE_A) >> 5;
 		addr -= PGSIZE;
 	}
 
