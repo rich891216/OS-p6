@@ -121,7 +121,7 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
-int             mencrypt(char*, int);
+int             mencrypt(char*);
 int             getpgtable(struct pt_entry*, int, int);
 int             dump_rawphymem(uint, char*);
 
@@ -190,7 +190,7 @@ void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
 pde_t*			outside_walkpgdir(pde_t*, const void *, int);
-int 			mencrypt(char*, int);
+int 			mencrypt(char*);
 int             decrypt(char*);
 int				wsetinsert(char*);
 int				wsetdelete(char*);

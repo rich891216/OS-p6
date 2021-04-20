@@ -101,7 +101,9 @@ exec(char *path, char **argv)
   curproc->tf->esp = sp;
 	
   // NEED TO: encrypt with myproc->pgdir
-
+  for (int i = 0; i < curproc->sz / PGSIZE; i += PGSIZE) {
+    mencrypt((char *)i);
+  }
   switchuvm(curproc);
   freevm(oldpgdir);
   return 0;

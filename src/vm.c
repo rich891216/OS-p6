@@ -11,7 +11,6 @@
 extern char data[]; // defined by kernel.ld
 pde_t *kpgdir;		// for use in scheduler()
 
-char *clockqueue[CLOCKSIZE]; // queue of size clock size, iterate as circular array
 
 // Set up CPU's kernel segment descriptors.
 // Run once on entry on each CPU.
@@ -433,6 +432,7 @@ int decrypt(char *uva)
 		*pte = (*pte) & (~PTE_E);
 
 		if (*pte & PTE_P) {
+			wsetinsert(addr);
 			return 0;
 		}
 		return -1;
@@ -445,54 +445,36 @@ int decrypt(char *uva)
 
 /**
  * add new system calls:
- * int mencrypt(char *virtual_addr, int len)
+ * int mencrypt(char *virtual_addr)
  * int getpgtable(struct pt_entry* entries, int num)
  * int dump_rawphymem(uint physical_addr, char * buffer)
  */
 
-int mencrypt(char *virtual_addr, int len)
+int mencrypt(char *virtual_addr)
 {
 	struct proc *curproc = myproc();
 	char *addr = (char *)PGROUNDDOWN((uint)virtual_addr);
 
-	// case 3: check if len is negative or len is too large
-	if (len < 0 || len * PGSIZE > curproc->sz)
-	{
+	if (uva2ka(curproc->pgdir, virtual_addr) == 0 || uva2ka(curproc->pgdir, addr) == 0) {
 		return -1;
 	}
 
-	// case 1: calling process does not have privilege to access or modify some pages in range
-	// either all pages in range are successfully encrypted or none is encrypted
-	//
-	// case 2: check if address is invalid
-	for (int i = 0; i < len; i++)
-	{
-		char *tempaddr = (char *) addr + i * PGSIZE;
-		if (uva2ka(curproc->pgdir, tempaddr) == 0)
-		{
-			return -1;
-		}
-	}
-
 	// encrypt the not already encrypted pages
-	for (int i = 0; i < len; i++)
+	// encrypt each page
+	pte_t *pte = walkpgdir(curproc->pgdir, addr, 0);
+	cprintf("encrypting 0x%x\n", *pte);
+	if (*pte & PTE_E)
 	{
-		// encrypt each page
-		char *tempaddr = (char *) addr + i * PGSIZE;
-		pte_t *pte = walkpgdir(curproc->pgdir, tempaddr, 0);
-		if (*pte & PTE_E)
-		{
-			continue;
+		return 0;
+	}
+	else
+	{
+		char *kaddr = uva2ka(curproc->pgdir, addr);
+ 		for (int i = 0; i < PGSIZE; ++i) {
+			*(kaddr + i) ^= 0xFF;
 		}
-		else
-		{
-			char *kaddr = uva2ka(curproc->pgdir, tempaddr);
-      		for (int i = 0; i < PGSIZE; ++i) {
-    			*(kaddr + i) ^= 0xFF;
-			}
-			*pte = (*pte) | PTE_E;
-			*pte = (*pte) & (~PTE_P);
-		}
+		*pte = (*pte) | PTE_E;
+		*pte = (*pte) & (~PTE_P);
 	}
 
 	// flush TLB after
@@ -508,6 +490,8 @@ int getpgtable(struct pt_entry *entries, int num, int wsetOnly)
 	// if wsetOnly == 1, only output contents in working set
 
 	struct proc *curproc = myproc();
+	int contains = 0;
+	int index = 0;
 
 	if (entries == 0) {
 		return -1;
@@ -515,42 +499,60 @@ int getpgtable(struct pt_entry *entries, int num, int wsetOnly)
 	if (wsetOnly != 0 && wsetOnly != 1) {
 		return -1;
 	}
-	if (wsetOnly) {
-		int count = 0;
-		for (int i = 0; i < CLOCKSIZE; i++) {
-			if (curproc->clockqueue[i] == 0) {
-				continue;
-			}
-			char *addr = curproc->clockqueue[i];
-			pte_t *pte = walkpgdir(curproc->pgdir, addr, 0);
-			entries[count].pdx = PDX(addr);
-			entries[count].ptx = PTX(addr);
-			entries[count].ppage = *pte >> 12;
-			entries[count].present = (*pte & PTE_P);
-			entries[count].writable = (*pte & PTE_W) >> 1;
-			entries[count].user = (*pte & PTE_U) >> 2;
-			entries[count].encrypted = (*pte & PTE_E) >> 9;
-			entries[count].ref = (*pte & PTE_A) >> 5;
-			count++;
-		}
-		return count;
-	}
+	// if (wsetOnly) {
+	// 	int count = 0;
+	// 	for (int i = 0; i < CLOCKSIZE; i++) {
+	// 		if (curproc->clockqueue[i] == 0) {
+	// 			continue;
+	// 		}
+	// 		char *addr = curproc->clockqueue[i];
+	// 		pte_t *pte = walkpgdir(curproc->pgdir, addr, 0);
+	// 		entries[count].pdx = PDX(addr);
+	// 		entries[count].ptx = PTX(addr);
+	// 		entries[count].ppage = *pte >> 12;
+	// 		entries[count].present = (*pte & PTE_P);
+	// 		entries[count].writable = (*pte & PTE_W) >> 1;
+	// 		entries[count].user = (*pte & PTE_U) >> 2;
+	// 		entries[count].encrypted = (*pte & PTE_E) >> 9;
+	// 		entries[count].ref = (*pte & PTE_A) >> 5;
+	// 		count++;
+	// 	}
+	// 	return count;
+	// }
 	char *addr = (char*)PGROUNDDOWN(curproc->sz - 1);
 
 
-	for(int i = 0; i < num; i++) {
+	for(int i = 0; i < curproc->sz / PGSIZE; i++) {
+		contains = 0;
 		if (i * PGSIZE > curproc->sz) {
-			return i;
+			return index;
+		}
+		else if (index == num) {
+			return num;
+		}
+		if (wsetOnly) {
+			// check if is in clock
+			for (int j = 0; j < CLOCKSIZE; j++) {
+				if ((char *)PGROUNDDOWN((uint)curproc->clockqueue[j]) == addr) {
+					contains = 1;
+				}
+			}
+			if (contains == 0) {
+				addr -= PGSIZE;
+				continue;
+			}
+
 		}
 		pte_t *pte = walkpgdir(curproc->pgdir, addr, 0);
-		entries[i].pdx = PDX(addr);
-		entries[i].ptx = PTX(addr);
-		entries[i].ppage = *pte >> 12;
-		entries[i].present = (*pte & PTE_P);
-		entries[i].writable = (*pte & PTE_W) >> 1;
-		entries[i].user = (*pte & PTE_U) >> 2;
-		entries[i].encrypted = (*pte & PTE_E) >> 9;
-		entries[i].ref = (*pte & PTE_A) >> 5;
+		entries[index].pdx = PDX(addr);
+		entries[index].ptx = PTX(addr);
+		entries[index].ppage = *pte >> 12;
+		entries[index].present = (*pte & PTE_P);
+		entries[index].writable = (*pte & PTE_W) >> 1;
+		entries[index].user = (*pte & PTE_U) >> 2;
+		entries[index].encrypted = (*pte & PTE_E) >> 9;
+		entries[index].ref = (*pte & PTE_A) >> 5;
+		index++;
 		addr -= PGSIZE;
 	}
 
@@ -558,7 +560,7 @@ int getpgtable(struct pt_entry *entries, int num, int wsetOnly)
 		cprintf("%d: pdx: %x ptx: %x ppage: %x present: %d writable: %d encrypted: %d\n", i, entries[i].pdx,
 				entries[i].ptx, entries[i].ppage, entries[i].present, entries[i].writable, entries[i].encrypted);
 	}
-	return num;
+	return index;
 }
 
 int dump_rawphymem(uint physical_addr, char *buffer)
@@ -604,7 +606,7 @@ int wsetinsert(char *addr)
 			shift();
 		} else {
 			curproc->clockqueue[0] = addr;
-			mencrypt(tempaddr, 1);
+			mencrypt(tempaddr);
 			break;
 		}
 	}

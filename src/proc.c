@@ -167,8 +167,9 @@ growproc(int n)
       return -1;
 
 	// NEED TO: encrypt from sz to sz + n
-	int len = (n / PGSIZE);
-    mencrypt((char*)sz, len);
+	  for (int i = curproc->sz; i < sz; i += PGSIZE) {
+      mencrypt((char *)i);
+    }
   } else if(n < 0){
     if((sz = deallocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
