@@ -515,6 +515,7 @@ int getpgtable(struct pt_entry *entries, int num, int wsetOnly)
 	if (wsetOnly) {
 		// only print working set
 		for (int i = 0; i < CLOCKSIZE; i++) {
+			char *addr = clockqueue[i];
 			pte_t *pte = walkpgdir(curproc->pgdir, addr, 0);
 			entries[i].pdx = PDX(addr);
 			entries[i].ptx = PTX(addr);

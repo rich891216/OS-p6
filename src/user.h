@@ -24,7 +24,7 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
-int getpgtable(struct pt_entry*, int);
+int getpgtable(struct pt_entry*, int, int);
 int dump_rawphymem(uint, char*);
 
 // ulib.c
