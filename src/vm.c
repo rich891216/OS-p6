@@ -6,11 +6,26 @@
 #include "mmu.h"
 #include "proc.h"
 #include "elf.h"
-#include "ptentry.h"
 
 extern char data[]; // defined by kernel.ld
 pde_t *kpgdir;		// for use in scheduler()
 
+int searchwset(char *virtual_address)
+{
+	struct proc *curproc = myproc();
+	// Find a matching element
+	for (int i = 0; i < CLOCKSIZE; ++i)
+	{
+		if (curproc->clockqueue[i] != (char *)-1)
+		{
+			if (curproc->clockqueue[i] == virtual_address)
+			{
+				return 1;
+			}
+		}
+	}
+	return -1;
+}
 
 // Set up CPU's kernel segment descriptors.
 // Run once on entry on each CPU.
@@ -33,7 +48,7 @@ void seginit(void)
 // Return the address of the PTE in page table pgdir
 // that corresponds to virtual address va.  If alloc!=0,
 // create any required page table pages.
-static pte_t *
+pte_t *
 walkpgdir(pde_t *pgdir, const void *va, int alloc)
 {
 	pde_t *pde;
@@ -41,7 +56,7 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
 
 	pde = &pgdir[PDX(va)];
 	if (*pde & PTE_P)
-	{
+	{ //No need to check PTE_E here.
 		pgtab = (pte_t *)P2V(PTE_ADDR(*pde));
 	}
 	else
@@ -75,14 +90,16 @@ mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
 			return -1;
 		if (*pte & (PTE_P | PTE_E))
 			panic("remap");
+
+		//"perm" is just the lower 12 bits of the PTE
+		//if encrypted, then ensure that PTE_P is not set
+		//This is somewhat redundant. If our code is correct,
+		//we should just be able to say pa | perm
 		if (perm & PTE_E)
-		{
-			*pte = pa | perm | PTE_E;
-		}
+			*pte = (pa | perm | PTE_E) & ~PTE_P;
 		else
-		{
 			*pte = pa | perm | PTE_P;
-		}
+
 		if (a == last)
 			break;
 		a += PGSIZE;
@@ -302,7 +319,9 @@ void freevm(pde_t *pgdir)
 	deallocuvm(pgdir, KERNBASE, 0);
 	for (i = 0; i < NPDENTRIES; i++)
 	{
-		if (pgdir[i] & (PTE_P | PTE_E))
+		//you don't need to check for PTE_E here because
+		//this is a pde_t, where PTE_E doesn't get set
+		if (pgdir[i] & PTE_P)
 		{
 			char *v = P2V(PTE_ADDR(pgdir[i]));
 			kfree(v);
@@ -361,26 +380,21 @@ bad:
 
 //PAGEBREAK!
 // Map user virtual address to kernel address.
+// UVA -> PA
+// KVA -> PA
+// PA -> KVA
+// KVA = PA + KERNBASE
 char *
 uva2ka(pde_t *pgdir, char *uva)
 {
 	pte_t *pte;
 
 	pte = walkpgdir(pgdir, uva, 0);
-
-	if ((*pte & PTE_U) == 0) {
+	//TODO: uva2ka says not present if PTE_P is 0
+	if (((*pte & PTE_P) | (*pte & PTE_E)) == 0)
 		return 0;
-	}
-
-	if ((*pte & PTE_P) == 0 && (*pte & PTE_E) == 0)
-	{
-      return 0;
-	}
-
-	if ((*pte & PTE_P) && (*pte & PTE_E)) {
+	if ((*pte & PTE_U) == 0)
 		return 0;
-	}
-
 	return (char *)P2V(PTE_ADDR(*pte));
 }
 
@@ -396,9 +410,12 @@ int copyout(pde_t *pgdir, uint va, void *p, uint len)
 	while (len > 0)
 	{
 		va0 = (uint)PGROUNDDOWN(va);
+		//TODO: what happens if you copyout to an encrypted page?
 		pa0 = uva2ka(pgdir, (char *)va0);
 		if (pa0 == 0)
+		{
 			return -1;
+		}
 		n = PGSIZE - (va - va0);
 		if (n > len)
 			n = len;
@@ -410,233 +427,233 @@ int copyout(pde_t *pgdir, uint va, void *p, uint len)
 	return 0;
 }
 
-//PAGEBREAK!
-// Blank page.
-//PAGEBREAK!
-// Blank page.
-//PAGEBREAK!
-// Blank page.
-
-int decrypt(char *uva)
+//returns 0 on success
+int mdecrypt(char *virtual_addr)
 {
-	struct proc *curproc = myproc();
-	char *addr = (char *)PGROUNDDOWN((uint)uva);
-	pte_t *pte = walkpgdir(curproc->pgdir, addr, 0);
-	if (*pte & PTE_E)
-	{
-		char *kaddr = uva2ka(curproc->pgdir, addr);
-      	for (int i = 0; i < PGSIZE; ++i) {
-    		*(kaddr + i) ^= 0xFF;
-		}
-		*pte = (*pte) | PTE_P;
-		*pte = (*pte) & (~PTE_E);
+	//cprintf("mdecrypt: VPN %d, %p, pid %d\n", PPN(virtual_addr), virtual_addr, myproc()->pid);
+	//the given pointer is a virtual address in this pid's userspace
+	struct proc *p = myproc();
+	pde_t *mypd = p->pgdir;
 
-		if (*pte & PTE_P) {
-			wsetinsert(addr);
-			return 0;
-		}
-		return -1;
-	}
-	else
+	if (virtual_addr >= (char *)KERNBASE)
 	{
 		return -1;
 	}
+	//set the present bit to true and encrypt bit to false
+	pte_t *pte = walkpgdir(mypd, virtual_addr, 0);
+	if (!pte || (*pte == 0))
+	{
+		return -1;
+	}
+
+	*pte = *pte & ~PTE_E;
+	*pte = *pte | PTE_P;
+
+	virtual_addr = (char *)PGROUNDDOWN((uint)virtual_addr);
+
+	char *slider = virtual_addr;
+	for (int offset = 0; offset < PGSIZE; offset++)
+	{
+		*slider = ~*slider;
+		slider++;
+	}
+
+	return wsetinsert(virtual_addr, p);
 }
 
-/**
- * add new system calls:
- * int mencrypt(char *virtual_addr)
- * int getpgtable(struct pt_entry* entries, int num)
- * int dump_rawphymem(uint physical_addr, char * buffer)
- */
-
-int mencrypt(char *virtual_addr)
+int mencrypt(char *virtual_addr, int len)
 {
-	struct proc *curproc = myproc();
-	char *addr = (char *)PGROUNDDOWN((uint)virtual_addr);
+	//the given pointer is a virtual address in this pid's userspace
+	struct proc *p = myproc();
+	pde_t *mypd = p->pgdir;
 
-	if (uva2ka(curproc->pgdir, virtual_addr) == 0 || uva2ka(curproc->pgdir, addr) == 0) {
-		return -1;
-	}
+	virtual_addr = (char *)PGROUNDDOWN((uint)virtual_addr);
 
-	// encrypt the not already encrypted pages
-	// encrypt each page
-	pte_t *pte = walkpgdir(curproc->pgdir, addr, 0);
-	// cprintf("encrypting 0x%x\n", *pte);
-	if (*pte & PTE_E)
+	//error checking first. all or nothing.
+	char *slider = virtual_addr;
+	for (int i = 0; i < len; i++)
 	{
-		return 0;
-	}
-	else
-	{
-		char *kaddr = uva2ka(curproc->pgdir, addr);
-		wsetdelete(addr);
- 		for (int i = 0; i < PGSIZE; ++i) {
-			*(kaddr + i) ^= 0xFF;
+		//check page table for each translation first
+		char *kvp = uva2ka(mypd, slider);
+		if (!kvp)
+		{
+			cprintf("mencrypt: Could not access address\n");
+			return -1;
 		}
-		*pte = (*pte) | PTE_E;
-		*pte = (*pte) & (~PTE_P);
+		slider = slider + PGSIZE;
 	}
 
-	// flush TLB after
-	switchuvm(curproc); // flush TLB?
+	//encrypt stage. Have to do this before setting flag
+	//or else we'll page fault
+	slider = virtual_addr;
+	for (int i = 0; i < len; i++)
+	{
+		//we get the page table entry that corresponds to this VA
+		pte_t *mypte = walkpgdir(mypd, slider, 0);
+		if (*mypte & PTE_E)
+		{ //already encrypted
+			slider += PGSIZE;
+			continue;
+		}
+		for (int offset = 0; offset < PGSIZE; offset++)
+		{
+			*slider = ~*slider;
+			slider++;
+		}
+		*mypte = *mypte & ~PTE_P;
+		*mypte = *mypte | PTE_E;
+		*mypte = *mypte & ~PTE_A;
+	}
+
+	switchuvm(myproc());
 	return 0;
 }
 
-// NEED TO: change to have wsetOnly mode
 int getpgtable(struct pt_entry *entries, int num, int wsetOnly)
 {
-	// implementation: fill up entries as <entries> is passed in as empty array
-	// print
-	// if wsetOnly == 1, only output contents in working set
+	// wsetOnly is a flag, must be 1 or 0
+	if (wsetOnly != 0 && wsetOnly != 1)
+	{
+		return -1;
+	}
 
 	struct proc *curproc = myproc();
-	int contains = 0;
 	int index = 0;
 
-	if (entries == 0) {
-		return -1;
-	}
-	if (wsetOnly != 0 && wsetOnly != 1) {
-		return -1;
-	}
-	char *addr = (char*)PGROUNDDOWN(curproc->sz - 1);
+	for (void *i = (void *)PGROUNDDOWN(((int)curproc->sz)); i >= 0; i -= PGSIZE)
+	{
+		//walk through the page table and read the entries
+		//Those entries contain the physical page number + flags
+		pte_t *pte = walkpgdir(curproc->pgdir, i, 0);
 
-
-	for(int i = 0; i < curproc->sz / PGSIZE; i++) {
-		contains = 0;
-		if (i * PGSIZE > curproc->sz) {
-			return index;
-		}
-		else if (index == num) {
-			return num;
-		}
-		if (wsetOnly) {
-			// check if is in clock
-			for (int j = 0; j < CLOCKSIZE; j++) {
-				if ((char *)PGROUNDDOWN((uint)curproc->clockqueue[j]) == addr) {
-					contains = 1;
-				}
+		if (wsetOnly == 1)
+		{
+			// Page is allocated and exists in working set
+			if (*pte && (searchwset(i) != -1))
+			{
+				entries[index].pdx = PDX(i);
+				entries[index].ptx = PTX(i);
+				entries[index].ppage = *pte >> 12;
+				entries[index].present = (*pte & PTE_P) ? 1 : 0;
+				entries[index].writable = (*pte & PTE_W) ? 1 : 0;
+				entries[index].user = (*pte & PTE_U) ? 1 : 0;
+				entries[index].encrypted = (*pte & PTE_E) ? 1 : 0;
+				entries[index].ref = (*pte & PTE_A) ? 1 : 0;
+				index++;
 			}
-			if (contains == 0) {
-				addr -= PGSIZE;
-				continue;
-			}
-
 		}
-		pte_t *pte = walkpgdir(curproc->pgdir, addr, 0);
-		entries[index].pdx = PDX(addr);
-		entries[index].ptx = PTX(addr);
-		entries[index].ppage = *pte >> 12;
-		entries[index].present = (*pte & PTE_P);
-		entries[index].writable = (*pte & PTE_W) >> 1;
-		entries[index].user = (*pte & PTE_U) >> 2;
-		entries[index].encrypted = (*pte & PTE_E) >> 9;
-		entries[index].ref = (*pte & PTE_A) >> 5;
-		index++;
-		addr -= PGSIZE;
+		else
+		{
+			// Page is allocated
+			if (*pte)
+			{
+				entries[index].pdx = PDX(i);
+				entries[index].ptx = PTX(i);
+				entries[index].ppage = *pte >> 12;
+				entries[index].present = (*pte & PTE_P) ? 1 : 0;
+				entries[index].writable = (*pte & PTE_W) ? 1 : 0;
+				entries[index].user = (*pte & PTE_U) ? 1 : 0;
+				entries[index].encrypted = (*pte & PTE_E) ? 1 : 0;
+				entries[index].ref = (*pte & PTE_A) ? 1 : 0;
+				index++;
+			}
+		}
+		if (i == 0 || index >= num)
+		{
+			break;
+		}
 	}
-
-	for (int i = 0; i < index; i++) {
-		cprintf("%d: pdx: %x ptx: %x ppage: %x present: %d writable: %d user: %d encrypted: %d ref: %d\n", i, entries[i].pdx,
-				entries[i].ptx, entries[i].ppage, entries[i].present, entries[i].writable, entries[i].user, entries[i].encrypted, entries[i].ref);
-	}
+	//index is the number of ptes copied
 	return index;
 }
 
 int dump_rawphymem(uint physical_addr, char *buffer)
 {
-	struct proc *curproc = myproc();
-
-	char *kaddr = P2V(physical_addr);
-	return copyout(curproc->pgdir, (uint)buffer, kaddr, PGSIZE);
+	*buffer = *buffer;
+	//note that copyout converts buffer to a kva and then copies
+	//which means that if buffer is encrypted, it won't trigger a decryption request
+	int retval = copyout(myproc()->pgdir, (uint)buffer, (void *)P2V(physical_addr), PGSIZE);
+	if (retval)
+		return -1;
+	return 0;
 }
 
-// implement queue here?
-int wsetinsert(char *addr)
+// Insert a page into the working set (queue)
+// Returns 0 on success and -1 on failure
+int wsetinsert(char *virtual_addr, struct proc *p)
 {
-	struct proc *curproc = myproc();
-	for (int i = 0; i < CLOCKSIZE; i++) {
-		if (curproc->clockqueue[i] == 0) {
-			// has empty entry
-			// add to queue here and return
-			curproc->clockqueue[i] = addr;
+	while (1)
+	{
+		// Move the hand
+		p->clockhand = (p->clockhand + 1) % CLOCKSIZE;
+		char *uva = (char *)PGROUNDDOWN((uint)p->clockqueue[p->clockhand]);
+		pte_t *pte = walkpgdir(p->pgdir, uva, 0);
+
+		// Empty space exists in queue
+		if (p->clockqueue[p->clockhand] == (char *)-1)
+		{
+			p->clockqueue[p->clockhand] = virtual_addr;
 			return 0;
 		}
-	}
-	// clock queue is full, find victim
-	// victim should be encrypted
-	// replace victim with new encrypted page
-	// for (int i = 0; i < CLOCKSIZE + 0; i++) {
-	// 	char *tempaddr = clockqueue[i % CLOCKSIZE];
-	// 	pte_t *pte = walkpgdir(myproc()->pgdir, tempaddr, 0);
-	// 	if ((*pte & PTE_A)) {
-	// 		*pte = (*pte) & (~PTE_A);
-	// 	} else {
-	// 		clockqueue[i] = addr;
-	// 		break;
-	// 	}
-	// }
-
-	while (1) {
-		char *tempaddr = curproc->clockqueue[0];
-		pte_t *pte = walkpgdir(myproc()->pgdir, tempaddr, 0);
-		if ((*pte & PTE_A)) {
-			*pte = (*pte) & (~PTE_A);
-			shift();
-		} else {
-			curproc->clockqueue[0] = addr;
-			mencrypt(tempaddr);
-			break;
+		// If working set is full, evict page with ref bit not set
+		else if (!((*pte) & PTE_A))
+		{
+			// Encrypt evicted page
+			if (mencrypt(p->clockqueue[p->clockhand], 1) != 0)
+			{
+				return -1;
+			}
+			// Replace with new page
+			p->clockqueue[p->clockhand] = virtual_addr;
+			return 0;
+		}
+		// Unset ref bit of page observing and move to next page
+		else
+		{
+			*pte = *pte & ~PTE_A;
 		}
 	}
-
-	return 0;
 }
 
-int wsetdelete(char *addr)
+// Delete a page from the working set (queue)
+// Returns 0 on success and -1 on failure
+int wsetdelete(char *virtual_address)
 {
 	struct proc *curproc = myproc();
-	int index = 0;
-	int found = 0;
-	for (index = 0; index < CLOCKSIZE; index++) {
-		if (curproc->clockqueue[index] == addr) {
-			// remove and shift
-			found = 1;
-			curproc->clockqueue[index] = 0;
+	int tail = curproc->clockhand;
+	int found = -1;
+
+	// Search for the location to delete
+	for (int i = 0; i < CLOCKSIZE; ++i)
+	{
+		if (curproc->clockqueue[(curproc->clockhand + i) % CLOCKSIZE] == virtual_address)
+		{
+			found = (curproc->clockhand + i) % CLOCKSIZE;
 		}
 	}
-	if (found) {
-		// shift and return 0
-		for (int i = index; i < CLOCKSIZE - 1; i++) {
-			curproc->clockqueue[i] = curproc->clockqueue[i+1];
+
+	// If location is found
+	if (found != -1)
+	{
+		// Delete by shifting all pages after it in queue left one
+		for (int i = found; i != tail; i = (i + 1) % CLOCKSIZE)
+		{
+			curproc->clockqueue[i] = curproc->clockqueue[(i + 1) % CLOCKSIZE];
 		}
-		curproc->clockqueue[CLOCKSIZE - 1] = 0;
+
+		// Clear tail address, shift clock hand to be one before it (for next add)
+		curproc->clockqueue[tail] = (char *)-1;
+		curproc->clockhand = curproc->clockhand == 0 ? CLOCKSIZE - 1 : curproc->clockhand - 1;
 		return 0;
-	} else {
-		// not found, return -1
-		return -1;
 	}
-	
-	return 0;
+	return -1;
 }
-int clearwset() {
+
+// Clear the working set (queue)
+void clearwset(void)
+{
 	struct proc *curproc = myproc();
-	for (int i = 0; i < CLOCKSIZE; i++) {
-		curproc->clockqueue[i] = 0;
-	}
-	return 0;
-}
-int shift() {
-	struct proc *curproc = myproc();
-	char *indexzero = curproc->clockqueue[CLOCKSIZE - 1];
-	char *tmp1 = curproc->clockqueue[0];
-	char *tmp2 = curproc->clockqueue[0];
-	for (int i = 1; i < CLOCKSIZE; i++) {
-		tmp2 = curproc->clockqueue[i];
-		curproc->clockqueue[i] = tmp1;
-		tmp1 = tmp2;
-	}
-	curproc->clockqueue[0] = indexzero;
-	return 0;
+	for (int i = 0; i < CLOCKSIZE; ++i)
+		curproc->clockqueue[i] = (char *)-1;
+	curproc->clockhand = -1;
 }

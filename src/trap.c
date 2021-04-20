@@ -43,7 +43,7 @@ void trap(struct trapframe *tf)
 			exit();
 		return;
 	}
-
+	char *addr;
 	switch (tf->trapno)
 	{
 	case T_IRQ0 + IRQ_TIMER:
@@ -81,15 +81,11 @@ void trap(struct trapframe *tf)
 		// check if clock array is full
 		// if full: pick victim to encrypt,
 		// else: decrypt and add to clock
-		// char *wset_toadd = (char *)rcr2();
-		if (decrypt((char *)rcr2()) == 0)
+		addr = (char *)rcr2();
+		if (!mdecrypt(addr))
 		{
-			// successfully decrypted
-			// add to working set
-			lapiceoi();
-			// return;
 			break;
-		}
+		};
 
 	//PAGEBREAK: 13
 	default:

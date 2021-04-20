@@ -1,3 +1,5 @@
+#include "ptentry.h"
+
 struct buf;
 struct context;
 struct file;
@@ -10,6 +12,8 @@ struct sleeplock;
 struct stat;
 struct superblock;
 struct pt_entry;
+
+typedef uint pte_t;
 
 // bio.c
 void            binit(void);
@@ -121,9 +125,6 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
-int             mencrypt(char*);
-int             getpgtable(struct pt_entry*, int, int);
-int             dump_rawphymem(uint, char*);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
@@ -189,13 +190,15 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
-pde_t*			outside_walkpgdir(pde_t*, const void *, int);
-int 			mencrypt(char*);
-int             decrypt(char*);
-int				wsetinsert(char*);
+pte_t*			walkpgdir(pde_t*, const void *, int);
+int 			mencrypt(char*, int);
+int             mdecrypt(char*);
+int             getpgtable(struct pt_entry*, int, int);
+int             dump_rawphymem(uint, char*);
+int				wsetinsert(char*, struct proc*);
 int				wsetdelete(char*);
-int             clearwset();
-int             shift();
+void            clearwset(void);
+int				searchwset(char*);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
