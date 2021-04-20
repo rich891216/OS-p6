@@ -168,17 +168,14 @@ growproc(int n)
 
 	// NEED TO: encrypt from sz to sz + n
 	int len = (n / PGSIZE);
-    if (n % PGSIZE != 0) {
-      len++;
-    }
     mencrypt((char*)sz, len);
   } else if(n < 0){
     if((sz = deallocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
 
-	for (int i = 0; i < n / PGSIZE; i++) {
-		wsetdelete((char*) sz - i);
-	}
+	  for (int i = 0; i > n; i--) {
+		  wsetdelete((char*) sz + i);
+	  }
   }
   curproc->sz = sz;
   switchuvm(curproc);

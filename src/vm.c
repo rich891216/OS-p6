@@ -500,7 +500,7 @@ int mencrypt(char *virtual_addr, int len)
 	return 0;
 }
 
-// NEED TO: change to have wSetOnly mode
+// NEED TO: change to have wsetOnly mode
 int getpgtable(struct pt_entry *entries, int num, int wsetOnly)
 {
 	// implementation: fill up entries as <entries> is passed in as empty array
@@ -512,21 +512,28 @@ int getpgtable(struct pt_entry *entries, int num, int wsetOnly)
 	if (entries == 0) {
 		return -1;
 	}
+	if (wsetOnly != 0 && wsetOnly != 1) {
+		return -1;
+	}
 	if (wsetOnly) {
-		// only print working set
+		int count = 0;
 		for (int i = 0; i < CLOCKSIZE; i++) {
-			char *addr = clockqueue[i];
+			if (curproc->clockqueue[i] == 0) {
+				continue;
+			}
+			char *addr = curproc->clockqueue[i];
 			pte_t *pte = walkpgdir(curproc->pgdir, addr, 0);
-			entries[i].pdx = PDX(addr);
-			entries[i].ptx = PTX(addr);
-			entries[i].ppage = *pte >> 12;
-			entries[i].present = (*pte & PTE_P);
-			entries[i].writable = (*pte & PTE_W) >> 1;
-			entries[i].user = (*pte & PTE_U) >> 2;
-			entries[i].encrypted = (*pte & PTE_E) >> 9;
-			entries[i].ref = (*pte & PTE_A) >> 5;
+			entries[count].pdx = PDX(addr);
+			entries[count].ptx = PTX(addr);
+			entries[count].ppage = *pte >> 12;
+			entries[count].present = (*pte & PTE_P);
+			entries[count].writable = (*pte & PTE_W) >> 1;
+			entries[count].user = (*pte & PTE_U) >> 2;
+			entries[count].encrypted = (*pte & PTE_E) >> 9;
+			entries[count].ref = (*pte & PTE_A) >> 5;
+			count++;
 		}
-		return 0;
+		return count;
 	}
 	char *addr = (char*)PGROUNDDOWN(curproc->sz - 1);
 
@@ -566,11 +573,12 @@ int dump_rawphymem(uint physical_addr, char *buffer)
 // implement queue here?
 int wsetinsert(char *addr)
 {
+	struct proc *curproc = myproc();
 	for (int i = 0; i < CLOCKSIZE; i++) {
-		if (clockqueue[i] == 0) {
+		if (curproc->clockqueue[i] == 0) {
 			// has empty entry
 			// add to queue here and return
-			clockqueue[i] = addr;
+			curproc->clockqueue[i] = addr;
 			return 0;
 		}
 	}
@@ -589,13 +597,13 @@ int wsetinsert(char *addr)
 	// }
 
 	while (1) {
-		char *tempaddr = clockqueue[0];
+		char *tempaddr = curproc->clockqueue[0];
 		pte_t *pte = walkpgdir(myproc()->pgdir, tempaddr, 0);
 		if ((*pte & PTE_A)) {
 			*pte = (*pte) & (~PTE_A);
 			shift();
 		} else {
-			clockqueue[0] = addr;
+			curproc->clockqueue[0] = addr;
 			mencrypt(tempaddr, 1);
 			break;
 		}
@@ -606,19 +614,20 @@ int wsetinsert(char *addr)
 
 int wsetdelete(char *addr)
 {
+	struct proc *curproc = myproc();
 	int index = 0;
 	int found = 0;
 	for (index = 0; index < CLOCKSIZE; index++) {
-		if (clockqueue[index] == addr) {
+		if (curproc->clockqueue[index] == addr) {
 			// remove and shift
 			found = 1;
-			clockqueue[index] = 0;
+			curproc->clockqueue[index] = 0;
 		}
 	}
 	if (found) {
 		// shift and return 0
 		for (int i = index; i < CLOCKSIZE - 1; i++) {
-			clockqueue[i] = clockqueue[i+1];
+			curproc->clockqueue[i] = curproc->clockqueue[i+1];
 		}
 		return 0;
 	} else {
@@ -629,20 +638,22 @@ int wsetdelete(char *addr)
 	return 0;
 }
 int clearwset() {
+	struct proc *curproc = myproc();
 	for (int i = 0; i < CLOCKSIZE; i++) {
-		clockqueue[i] = 0;
+		curproc->clockqueue[i] = 0;
 	}
 	return 0;
 }
 int shift() {
-	char *indexzero = clockqueue[CLOCKSIZE - 1];
-	char *tmp1 = clockqueue[0];
-	char *tmp2 = clockqueue[0];
+	struct proc *curproc = myproc();
+	char *indexzero = curproc->clockqueue[CLOCKSIZE - 1];
+	char *tmp1 = curproc->clockqueue[0];
+	char *tmp2 = curproc->clockqueue[0];
 	for (int i = 1; i < CLOCKSIZE; i++) {
-		tmp2 = clockqueue[i];
-		clockqueue[i] = tmp1;
+		tmp2 = curproc->clockqueue[i];
+		curproc->clockqueue[i] = tmp1;
 		tmp1 = tmp2;
 	}
-	clockqueue[0] = indexzero;
+	curproc->clockqueue[0] = indexzero;
 	return 0;
 }
